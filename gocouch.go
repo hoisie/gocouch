@@ -295,16 +295,17 @@ func (database *Database) Delete(docid string) os.Error {
 }
 
 func (database *Database) Query(map_fun string) os.Error { 
-   
+   var url string = buildURL(database.Address,"_temp_view");
    var body = map[string]string {"map": map_fun, "language":"javascript"};
 
+  /*
    var buf bytes.Buffer;
    err := json.Marshal(&buf, body);
    if err != nil {
        return nil;
    }
    println(buf.String());
-   
+   */
    return nil;
 }
 
