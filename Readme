@@ -1,1 +1,5 @@
 gocouch is a couchdb library for go. 
+
+For usage examples, see gocouch_test.go. 
+
+
