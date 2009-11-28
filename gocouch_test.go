@@ -163,7 +163,7 @@ type testdoc struct {
 
 var map_fun = `function(doc) {
      if (doc.gender == 'male')
-        emit(doc.name.length, null);
+        emit(doc.name, null);
 }`
 
 var test_docs = []testdoc {
@@ -185,6 +185,12 @@ func TestQueryDocument(t *testing.T) {
      }
   }
 
-  database.Query(map_fun);
+  rows, err := database.Query(map_fun);
+  if err != nil {
+     t.Error(err.String());
+  }
+  if len(rows) != 3 {
+     t.Error("Expected 3 rows");
+  }
 
 }
