@@ -294,19 +294,23 @@ func (database *Database) Delete(docid string) os.Error {
   return nil;
 }
 
-func (database *Database) Query(map_fun string) os.Error { 
-   var url string = buildURL(database.Address,"_temp_view");
-   var body = map[string]string {"map": map_fun, "language":"javascript"};
+type QueryResults struct {
+  Total_rows int;
+  Offset int;
+  Rows []struct { Id string; Key string; Value string };
+}
 
-  /*
-   var buf bytes.Buffer;
-   err := json.Marshal(&buf, body);
-   if err != nil {
-       return nil;
-   }
-   println(buf.String());
-   */
-   return nil;
+func (database *Database) Query(map_fun string) os.Error { 
+  var url string = buildURL(database.Address,"_temp_view");
+  var body = map[string]string {"map": map_fun, "language":"javascript"};
+  var buf bytes.Buffer;
+  json.Marshal(&buf, body);
+  resp, err := post(url, buf.String());
+  if err != nil {
+     return err;
+  }
+  _ ,err = readResponse(resp);
+  return nil;
 }
 
 

@@ -6,7 +6,6 @@ import (
 
 var dbname string = "test123";
 
-
 func clearDatabase(t *testing.T) {
   server := Server{"http://127.0.0.1:5984"};
 
@@ -164,7 +163,7 @@ type testdoc struct {
 
 var map_fun = `function(doc) {
      if (doc.gender == 'male')
-        emit(doc.name, null);
+        emit(doc.name.length, null);
 }`
 
 var test_docs = []testdoc {
