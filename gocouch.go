@@ -2,20 +2,36 @@ package gocouch
 
 import ( 
   "bytes";
-  "http";
+  //"http";
+  "container/vector"
+  //"fmt"
+  "httplib"
   "os";
-  "io";
+  "io/ioutil";
   "json";
   "reflect";
+  "strconv"
   "strings";
 )
 
 type Server struct {
-  Address string;
+  	res *resource;
+}
+
+func NewServer ( address string ) *Server {
+	res := newResource ( address )
+	server := Server { res }
+	return &server
 }
 
 type Database struct {
-  Address string;
+	res *resource;
+}
+
+func NewDatabase ( address string ) *Database {
+	res := newResource ( address )
+	db := Database { res }
+	return &db
 }
 
 type CouchError struct {
@@ -24,151 +40,157 @@ type CouchError struct {
 }
 
 func (e CouchError) String() string {
-  return e.Op + ":" + e.Message;
+	return e.Op + ":" + e.Message;
 }
 
-func buildURL(base string, path ... ) string {  
-  if base[len(base)-1] == '/' {
-    base = base[0:len(base)-1];
+type resource struct {
+	address string;
+	client *httplib.Client;
+}
+
+func newResource ( address string ) *resource {
+  if address[len(address)-1] == '/' {
+    address = address[0:len(address)-1];
   }
+  
+  return &resource { address, &httplib.Client{} }
+}
+
+func (res *resource) buildURL(path ... ) string {  
   val := reflect.NewValue(path).(*reflect.StructValue);
   
   stripPaths := make([]string, val.NumField());
   
   for i:= 0; i < val.NumField(); i++ {
     s := val.Field(i).(*reflect.StringValue).Get();
+    
+    if len(s) == 0 {
+    	continue;
+    }
+    
     if s[0] == '/' {
       s = s[1:];
     }
-    
+ 	
+	if len(s) == 0 {
+		continue
+	}
+	
     if s[len(s)-1] == '/' {
       s = s[0:len(s)-1];
     }
     stripPaths[i] = s;
   }
   
-  return base + "/" + strings.Join(stripPaths, "/");
+  return res.address + "/" + strings.Join(stripPaths, "/");
 }
 
-
-func request(method string, url string, body io.Reader) (r *http.Response, err os.Error) {
-  var req http.Request;
-  req.Method = method;
-  req.Header = map[string]string{
-     "Accept": "application/json",
-  };
-  req.Body = body;
+func (res *resource) request(method string, path string, body string) (*httplib.Response, os.Error) {
+ 	headers := map[string]string{
+		"Accept": "application/json",
+  	};
   
-  req.URL, err = http.ParseURL(url);
+  	if len(body) > 0 {
+  		cl:= strconv.Itoa ( len (body) )
+  		headers["Content-Length"] = cl
+  	}
+  	
+  	url := res.buildURL ( path )
   
-  if err != nil {
-    return nil, err
-  }
-  
-  return http.Send(&req);
+  	resp,err := res.client.Request ( url, method, headers, body )
+  	
+  	if err != nil {
+  		println("error at request", err.String())
+  		return nil,err
+  	}
+  	
+  	return resp, nil
 }
 
-func readResponse ( response *http.Response ) (content string, err os.Error) {
-  var b [] byte;
-  b, err = io.ReadAll(response.Body);
-  response.Body.Close();
+func readResponse ( resp *httplib.Response ) (string, os.Error) {
+  data, err := ioutil.ReadAll(resp.Body);
+  
   if err != nil {
     return "", err;
   }
-  return string(b), nil;
-}
-
-func head(url string) (r *http.Response, err os.Error) {
-  return request("HEAD", url, nil);
-}
-
-func put(url string) (r *http.Response, err os.Error) {
-  return request("PUT", url, nil);
-}
-
-func delete(url string) (r *http.Response, err os.Error) {
-  return request("DELETE", url, nil);
-}
-
-func get(url string) (r *http.Response, err os.Error) {
-  return request("GET", url, nil);
-}
-
-func post(url string, body string) (r *http.Response, err os.Error) {
-  return request("POST", url, bytes.NewBufferString(body));
-}
-
-func (server *Server) Contains(dbname string) (b bool, err os.Error) { 
-  var url string = server.Address + "/" + dbname;
-  resp, err := head(url);
   
-  if (err != nil)
-  {
-    return false, err;
+  return string(data), nil;
+
+}
+func (res *resource) head(path string) (*httplib.Response , os.Error) {
+  return res.request("HEAD", path, "");
+}
+
+func (res *resource) put(path string, body string) (*httplib.Response, os.Error) {
+  return res.request("PUT", path, body);
+}
+
+func (res *resource) delete(path string) (*httplib.Response, os.Error) {
+  return res.request("DELETE", path, "");
+}
+
+func (res *resource) get(path string) (*httplib.Response, os.Error) {
+  return res.request("GET", path, "");
+}
+
+func (res *resource) post(path string, body string) (*httplib.Response, os.Error) {
+  return res.request("POST", path, body);
+}
+
+func (server *Server) Contains(dbname string) (bool, os.Error) { 
+  resp, err := server.res.head(dbname);
+  
+  if (err != nil) {
+    return false, CouchError{"server.Contains", err.String()};
   }
   
-  return (resp.StatusCode == 200), nil;
+  return (resp.Status == 200), nil;
 }
 
 func (server *Server) Create(dbname string) (b bool, err os.Error) { 
-  var url string = server.Address + "/" + dbname;
-  resp, err := put(url);
+  resp, err := server.res.put(dbname,"");
   
-  if (err != nil)
-  {
-    return false, CouchError{"server.create", err.String()};
+  if (err != nil) {
+    return false, CouchError{"server.Create", err.String()};
   }
   
-  if (resp.StatusCode == 412)
-  {
-    return false, CouchError{"server.create", "database already exists"};
+  if (resp.Status == 412) {
+    return false, CouchError{"server.Create", "database already exists"};
   }
+  
   return true, nil;
 }
 
 func (server *Server) Delete(dbname string) (b bool, err os.Error) { 
-  var url string = server.Address + "/" + dbname;
-  resp, err := delete(url);
+  resp, err := server.res.delete(dbname);
   
-  if (err != nil)
-  {
-    return false, CouchError{"server.delete", err.String()};
+  if (err != nil) {
+    return false, CouchError{"server.Delete", err.String()};
   }
   
-  if (resp.StatusCode == 412)
-  {
-    return false, CouchError{"server.delete", "database already exists"};
+  if (resp.Status == 412) {
+    return false, CouchError{"server.Delete", "database already exists"};
   }
+  
   return true, nil;
 }
 
-func (server *Server) GetAll() ([] string, os.Error) { 
-  var url string = server.Address + "/" + "_all_dbs";
-  resp, _, err := http.Get(url);
-  if err != nil {
-    return nil, err;
-  }
+func (server *Server) GetAll() ([]string, os.Error) { 
+	resp, err := server.res.get("_all_dbs");
+	if err != nil {
+		return nil, CouchError{"server.GetAll", err.String()};
+	}
+  	
+  	contents,err := readResponse( resp );
+  	
+  	if (err != nil) {
+    	return nil, CouchError{"server.GetAll", err.String()};;
+  	}
+  	
+	dbs := new(vector.StringVector)
+  	json.Unmarshal ( contents, dbs)
   
-  contents,err := readResponse( resp );
-  
-  if (err != nil)
-  {
-    return nil, err;
-  }
-  
-  mapv, ok, _ := json.StringToJson(contents);
-  
-  if !ok {
-    return nil, CouchError{"server.GetAll", "error parsing sever response"};
-  }
-  
-  var dbs []string = make([]string, mapv.Len());
-  
-  for i := 0; i < mapv.Len(); i++ {
-    dbs[i] = mapv.Elem(i).String();
-  }
-
-  return dbs, nil;
+  	return *dbs, nil;
 }
 
 func (server *Server) Len() (int, os.Error) { 
@@ -181,27 +203,23 @@ func (server *Server) Len() (int, os.Error) {
 }
 
 func (database *Database) Contains(docid string) (b bool, err os.Error) { 
-  var url string = database.Address + "/" + docid;
-  resp, err := head(url);
+  resp, err := database.res.head(docid);
   
   if err != nil {
     return false, err;
   }
   
-  return (resp.StatusCode == 200), nil;
+  return (resp.Status == 200), nil;
 }
 
-func (database *Database) GetJson(docid string) (string, os.Error) { 
-  var url string = database.Address+"/"+docid;
-  
-
-  resp, err := get(url); 
+func (database *Database) Get(docid string) (string, os.Error) { 
+  resp, err := database.res.get(docid); 
   if err != nil {
     return "", err;
   }
   
-  if resp.StatusCode > 400 {
-    return "", CouchError{"database.Get", "error"};
+  if resp.Status > 400 {
+    return "", CouchError{"database.Get", "Not found"};
   }
   
   data,err := readResponse( resp ); 
@@ -212,86 +230,69 @@ func (database *Database) GetJson(docid string) (string, os.Error) {
   return data, nil;
 }
 
+func (database *Database) Create(data string) (string, string, os.Error) { 
 
-func (database *Database) Get(docid string, val interface{}) os.Error { 
-  body,err := database.GetJson(docid);
-
-  if err != nil {
-    return err;
-  }
-  
-  ok, errtok := json.Unmarshal(body, val ); 
-  
-  if !ok {
-    return CouchError{"database.Get", errtok};;
-  }
-  
-  return nil;
-}
-
-
-func (database *Database) Create(contents interface{}) (string, os.Error) { 
-  var url string = database.Address;
-  var buf bytes.Buffer;
-  
-  err := json.Marshal(&buf, contents );
-  
-  resp, err := post(url, string(buf.Bytes()));
+  resp, err := database.res.post("/", data);
   
   if err != nil {
-    return "", err;
+    return "","", err;
   }
   
+  body,err := readResponse( resp );
   
-  data,err := readResponse( resp );
-  if err != nil || resp.StatusCode > 400 {
-    
+  if err != nil || resp.Status > 400 {
+  	return "", "", CouchError{"database.Create", "error"};
   }
+  
   var couchResp struct { Ok string; Id string; Rev string }; 
+  json.Unmarshal(body, &couchResp);
 
-  json.Unmarshal(data, &couchResp);
-
-  return couchResp.Id, nil;
+  return couchResp.Id, couchResp.Rev, nil;
 }
 
-func (database *Database) Update(id string, contents interface{}) os.Error { 
-  var url string = database.Address + "/" + id;
-  var buf bytes.Buffer;
-  
-  err := json.Marshal(&buf, contents );
-  
-  resp, err := post(url, string(buf.Bytes()));
+func (database *Database) Update(id string, data string) os.Error { 
+  resp, err := database.res.put(id, data);
   
   if err != nil {
     return err;
   }
   
+  body,err := readResponse( resp );
   
-  data,err := readResponse( resp );
-  if err != nil || resp.StatusCode > 400 {
-    
+  if err != nil || resp.Status > 400 {
+    return CouchError{"database.Update", "error"};
   }
   var couchResp struct { Ok string; Id string; Rev string }; 
 
-  json.Unmarshal(data, &couchResp);
+  json.Unmarshal(body, &couchResp);
 
   return nil;
 }
 
-func (database *Database) Delete(docid string) os.Error { 
-  var url string = buildURL(database.Address, docid);
-  resp,err := head(url);
+func (database *Database) Delete(docid string, revid string) os.Error { 
+/*
+  	resp,err := database.res.head(docid);
   
-  if err != nil {
-     return err;
-  }
-  rev := resp.Header["Etag"][1:len(resp.Header["Etag"])-1];
-  if resp.StatusCode == 200 {
-    url += "?rev="+rev;
-    resp, err = delete(url);
-  }
-  
-  return nil;
+  	if err != nil {
+   		return err;
+  	}
+  	fmt.Printf("head results %v\n",resp.Headers)
+  	etag := resp.Headers["Etag"][0]
+  	rev := etag[1:len(etag)-1]
+  	
+  	if resp.Status == 200 {
+  	*/
+    	resp, err := database.res.delete(docid+"?rev="+revid);
+    		
+      	body,_ := readResponse( resp );
+  	
+  		println(body)
+
+    	if err != nil || resp.Status > 400 {
+    		return CouchError{"database.Delete", "error"};
+    	}
+ 	//}
+  	return nil;
 }
 
 type Row struct {
@@ -300,7 +301,6 @@ type Row struct {
     Value string;
 }
 
-
 type QueryResults struct {
   Total_rows int;
   Offset int;
@@ -308,11 +308,11 @@ type QueryResults struct {
 }
 
 func (database *Database) Query(map_fun string) ([] Row, os.Error) { 
-  var url string = buildURL(database.Address,"_temp_view");
+  //var url string = buildURL(database.Address,"_temp_view");
   var body = map[string]string {"map": map_fun, "language":"javascript"};
   var buf bytes.Buffer;
   json.Marshal(&buf, body);
-  resp, err := post(url, buf.String());
+  resp, err := database.res.post("_temp_view", buf.String());
   if err != nil {
      return nil, err;
   }
@@ -321,5 +321,4 @@ func (database *Database) Query(map_fun string) ([] Row, os.Error) {
   json.Unmarshal(contents, &results);
   return results.Rows, nil
 }
-
 
