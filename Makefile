@@ -5,7 +5,14 @@
 include $(GOROOT)/src/Make.$(GOARCH)
 
 TARG=gocouch
+GOFMT=gofmt -spaces=true -tabindent=false -tabwidth=4
+
 GOFILES=\
 	gocouch.go\
 
 include $(GOROOT)/src/Make.pkg
+
+format:
+	${GOFMT} -w gocouch.go
+	${GOFMT} -w gocouch_test.go
+
