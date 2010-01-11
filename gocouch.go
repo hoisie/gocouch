@@ -276,29 +276,35 @@ func (database *Database) Update(id string, data string) os.Error {
     return nil
 }
 
-func (database *Database) Delete(docid string, revid string) os.Error {
-    /*
-      	resp,err := database.res.head(docid);
+func (database *Database) Delete(docid string) os.Error {
 
-      	if err != nil {
-       		return err;
-      	}
-      	fmt.Printf("head results %v\n",resp.Headers)
-      	etag := resp.Headers["Etag"][0]
-      	rev := etag[1:len(etag)-1]
+    resp, err := database.res.head(docid)
 
-      	if resp.Status == 200 {
-    */
-    resp, err := database.res.delete(docid + "?rev=" + revid)
-
-    body, _ := readResponse(resp)
-
-    println(body)
-
-    if err != nil || resp.Status > 400 {
-        return CouchError{"database.Delete", "error"}
+    if err != nil {
+        return err
     }
-    //}
+    etag := resp.Headers["Etag"][0]
+    rev := etag[1 : len(etag)-1]
+    if resp.Status == 200 {
+
+        resp, err := database.res.delete(docid + "?rev=" + rev)
+        body, err := readResponse(resp)
+
+        var res struct {
+            Ok     bool
+            Error  string
+            Reason string
+        }
+        json.Unmarshal(body, &res)
+
+        if err != nil {
+            return CouchError{"database.Delete", err.String()}
+        }
+
+        if res.Error != "" {
+            return CouchError{"database.Delete", res.Reason}
+        }
+    }
     return nil
 }
 

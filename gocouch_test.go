@@ -5,7 +5,6 @@ import (
     //"fmt"
     "json"
     "testing"
-    //"time"
 )
 
 var dbname string = "test123"
@@ -154,47 +153,57 @@ func TestUpdateDocument(t *testing.T) {
     }
 
 }
-/*
+
 func TestDeleteDocument(t *testing.T) {
-  initDatabase(t);
-  test_document := struct { a int; b string } {12, "this is a test"};
-  database := NewDatabase("http://127.0.0.1:5984/test123/");
-  docid,revid,err := database.Create(tojs(test_document));
-  if err != nil {
-    t.Error(err.String());
-  }
+    initDatabase(t)
+    test_document := struct {
+        a   int
+        b   string
+    }{12, "this is a test"}
 
-  if docid == "" {
-    t.Error("Doc Id is null");
-  }
+    database := NewDatabase("http://127.0.0.1:5984/test123/")
+    docid, _, err := database.Create(tojs(test_document))
+    if err != nil {
+        t.Error(err.String())
+    }
 
-  println("docid", docid, "revid", revid)
+    if docid == "" {
+        t.Error("Doc Id is null")
+    }
 
- // var contents struct { A int; B string };
+    var contents struct {
+        A   int
+        B   string
+    }
 
- // _,err = database.Get(docid);
-  //if err != nil {
-  ///  t.Error(err.String());
-  //}
-	time.Sleep(5 * 1e9)
-  if err := database.Delete(docid, revid); err != nil {
-   t.Error(err.String());
-  }
+    body, err := database.Get(docid)
+    if err != nil {
+        t.Error(err.String())
+    }
 
-  /*
-  contains,err := database.Contains(docid);
+    json.Unmarshal(body, &contents)
 
-  if err != nil {
-   t.Error(err.String());
-  }
+    if contents.A != 12 || contents.B != "this is a test" {
+        t.Fatalf("TestDelete - failed to store test document")
+    }
 
-  if contains {
-    t.Error("Document should be deleted");
-  }
+    if err := database.Delete(docid); err != nil {
+        t.Error(err.String())
+    }
 
+    contains, err := database.Contains(docid)
+
+    if err != nil {
+        t.Error(err.String())
+    }
+
+    if contains {
+        t.Error("Document should be deleted")
+    }
 
 }
 
+/*
 type testdoc struct {
 	name string;
         gender string;
