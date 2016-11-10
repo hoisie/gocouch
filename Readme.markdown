@@ -10,7 +10,7 @@ Because go's current http package cannot send generic http requests, gocouch req
     }
 
 
-After that change, gocouch builds and installs like any other go package. Simply to make && make install to put it in the go binary package director. 
+After that change, gocouch builds and installs like any other go package. Simply do `make && make install` to put it in the go binary package director. 
 
 Usage
 ============
